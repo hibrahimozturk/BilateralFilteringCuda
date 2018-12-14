@@ -54,10 +54,10 @@ __global__ void mask_calc_kernel(float *g_1d, float *g_2d, const int radius, con
 	if((x>=size)||(y>=size))
 		return;
 	
-	//Calculo mask gaussian 2d
+	//Calculate mask gaussian 2d
 	g_2d[x*size+y]=gaussian_2d(x, y, s);
 
-	//Calculo mask gaussian 1d
+	//Calculate mask gaussian 1d
 	const int w=threadIdx.y*16+threadIdx.x;
 	if(w<256)
 		g_1d[w]=gaussian_1d(w, r);
@@ -152,6 +152,9 @@ __device__ float kernel_r2(const int x, const int y, float *g2d, float *g1d){
 	float value=0.0, k=0.0;
 	int pixel=tex2D(CUDA_Frame, x, y), pos=0;
 	
+	// -6 -3 0 3 6 olarak gitmesi büyük ihtimalle RGB olmasından kaynaklı
+	// -2 -1 0 1 2 yaptığımda değişik bir çıktı aldım
+
 	for(int i=-2; i<3; i++){
 		value+=tex2D(CUDA_Frame, x-6, y+i)*g2d[pos]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-6, y+i))]
 			+tex2D(CUDA_Frame, x-3, y+i)*g2d[pos+1]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-3, y+i))]
@@ -194,12 +197,15 @@ __global__ void bilateral_kernel_v7(unsigned char *out, const int width, const i
 	extern __shared__ float g2d[];
 	if( threadIdx.x<size && threadIdx.y<size ){
 		g2d[threadIdx.y*size+threadIdx.x]=mask[threadIdx.y*size+threadIdx.x];
-		if( (threadIdx.x+32)<size )
-			g2d[threadIdx.y*size+(threadIdx.x+32)]=mask[threadIdx.y*size+(threadIdx.x+32)];
-		if( (threadIdx.y+32)<size )
-			g2d[(threadIdx.y+32)*size+threadIdx.x]=mask[(threadIdx.y+32)*size+threadIdx.x];
-		if( (threadIdx.x+32)<size && (threadIdx.y+32)<size )
-			g2d[(threadIdx.y+32)*size+(threadIdx.x+32)]=mask[(threadIdx.y+32)*size+(threadIdx.x+32)];
+
+		// !!!!!!!!! Filtre yarıçapının 16 gibi bir değer olması lazım buraya girmesi için onun için silinebilir !!!!!
+
+//		if( (threadIdx.x+32)<size )
+//			g2d[threadIdx.y*size+(threadIdx.x+32)]=mask[threadIdx.y*size+(threadIdx.x+32)];
+//		if( (threadIdx.y+32)<size )
+//			g2d[(threadIdx.y+32)*size+threadIdx.x]=mask[(threadIdx.y+32)*size+threadIdx.x];
+//		if( (threadIdx.x+32)<size && (threadIdx.y+32)<size )
+//			g2d[(threadIdx.y+32)*size+(threadIdx.x+32)]=mask[(threadIdx.y+32)*size+(threadIdx.x+32)];
 	}
 
 	__shared__ float gaussian[256];
@@ -218,7 +224,7 @@ __global__ void bilateral_kernel_v7(unsigned char *out, const int width, const i
 		case 3: result=kernel_r3(x, y, g2d, gaussian); break;
 		case 4: result=kernel_r4(x, y, g2d, gaussian); break;
 		case 5: result=kernel_r5(x, y, g2d, gaussian); break;
-		default: result=0.0; break;
+		default: result=255.0; break;
 	}
 	out[y*pitch+x]=(unsigned char) result;
 }
@@ -468,12 +474,13 @@ void CUDABilateralFilter::apply(const Mat &input, Mat &output){
 	//size_t gpu_image_pitch=width*height*sizeof(unsigned char);
 	size_t gpu_image_pitch=0;
 
-	//SAFE_CALL(cudaMalloc((void**)&GPU_input, gpu_image_pitch), "CUDA MALLOC Input");
-	//SAFE_CALL(cudaMalloc((void**)&GPU_output, gpu_image_pitch), "CUDA MALLOC Output");
+//	SAFE_CALL(cudaMalloc((void**)&GPU_input, gpu_image_pitch), "CUDA MALLOC Input");
+//	SAFE_CALL(cudaMalloc((void**)&GPU_output, gpu_image_pitch), "CUDA MALLOC Output");
 	SAFE_CALL(cudaMallocPitch<unsigned char>(&GPU_input, &gpu_image_pitch, width, height), "CUDA MALLOC PITCH");
 	SAFE_CALL(cudaMallocPitch<unsigned char>(&GPU_output, &gpu_image_pitch, width, height), "CUDA MALLOC PITCH");
 
 	//SAFE_CALL(cudaBindTexture(NULL, CUDA_Data, GPU_input, gpu_image_pitch), "CUDA BIND TEXTURE");
+	// değişebilir
 	SAFE_CALL(cudaBindTexture2D(NULL, CUDA_Frame, GPU_input, width, height, gpu_image_pitch), "CUDA BIND TEXTURE");
 	CUDA_Frame.addressMode[0] = CUDA_Frame.addressMode[1] = cudaAddressModeBorder;
 
