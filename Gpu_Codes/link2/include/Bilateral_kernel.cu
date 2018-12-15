@@ -65,39 +65,24 @@ __global__ void mask_calc_kernel(float *g_1d, float *g_2d, const int radius, con
 
 }
 
-__device__ float kernel_r5(const int x, const int y, float *g2d, float *g1d){
+__device__ float kernel(int x, const int y, float *g2d, float *g1d){
 	float value=0.0, k=0.0;
-	int pixel=tex2D(CUDA_Frame, x, y), pos=0;
+	int pixel=tex2D(CUDA_Frame, x, y);
+	int pos_value=0, pos_k=0;
 	
 	for(int i=-5; i<6; i++){
-		value+=tex2D(CUDA_Frame, x-15, y+i)*g2d[pos]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-15, y+i))]
-			+tex2D(CUDA_Frame, x-12, y+i)*g2d[pos+1]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-12, y+i))]
-			+tex2D(CUDA_Frame, x-9, y+i)*g2d[pos+2]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-9, y+i))]
-			+tex2D(CUDA_Frame, x-6, y+i)*g2d[pos+3]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-6, y+i))]
-			+tex2D(CUDA_Frame, x-3, y+i)*g2d[pos+4]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-3, y+i))]
-			+tex2D(CUDA_Frame, x, y+i)*g2d[pos+5]*g1d[ABS(pixel-tex2D(CUDA_Frame, x, y+i))]
-			+tex2D(CUDA_Frame, x+3, y+i)*g2d[pos+6]*g1d[ABS(pixel-tex2D(CUDA_Frame, x+3, y+i))]
-			+tex2D(CUDA_Frame, x+6, y+i)*g2d[pos+7]*g1d[ABS(pixel-tex2D(CUDA_Frame, x+6, y+i))]
-			+tex2D(CUDA_Frame, x+9, y+i)*g2d[pos+8]*g1d[ABS(pixel-tex2D(CUDA_Frame, x+9, y+i))]
-			+tex2D(CUDA_Frame, x+12, y+i)*g2d[pos+9]*g1d[ABS(pixel-tex2D(CUDA_Frame, x+12, y+i))]
-			+tex2D(CUDA_Frame, x+15, y+i)*g2d[pos+10]*g1d[ABS(pixel-tex2D(CUDA_Frame, x+15, y+i))];
-		k+=g2d[pos++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-15, y+i))]
-			+g2d[pos++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-12, y+i))]
-			+g2d[pos++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-9, y+i))]
-			+g2d[pos++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-6, y+i))]
-			+g2d[pos++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-3, y+i))]
-			+g2d[pos++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x, y+i))]
-			+g2d[pos++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x+3, y+i))]
-			+g2d[pos++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x+6, y+i))]
-			+g2d[pos++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x+9, y+i))]
-			+g2d[pos++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x+12, y+i))]
-			+g2d[pos++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x+15, y+i))];
+		for(int channel_pos=-15; channel_pos<=15; channel_pos+=3){
+			value+=tex2D(CUDA_Frame, x-channel_pos, y+i)*g2d[pos_value++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-channel_pos, y+i))];
+		}
+		for(int channel_pos=-15; channel_pos<=15; channel_pos+=3){
+			k+=g2d[pos_k++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-channel_pos, y+i))];
+		}
 	}
 
 	return value/k;
 }
 
-__global__ void bilateral_kernel_v7(unsigned char *out, const int width, const int height,
+__global__ void bilateral_kernel(unsigned char *out, const int width, const int height,
 								const size_t pitch, const int radius, const float *mask, const float *gauss){
 
 	const int x = threadIdx.x + blockIdx.x * blockDim.x;
@@ -119,7 +104,7 @@ __global__ void bilateral_kernel_v7(unsigned char *out, const int width, const i
 		return;
 
 	float result=0.0;
-	result=kernel_r5(x, y, g2d, gaussian);
+	result=kernel(x, y, g2d, gaussian);
 	out[y*pitch+x]=(unsigned char) result;
 }
 
@@ -161,10 +146,9 @@ void CUDABilateralFilter::apply(const Mat &input, Mat &output){
 	SAFE_CALL(cudaDeviceSynchronize(), "CUDA DEVICE SYNCHRONIZE Mask");
 
 	Timer t;
-	cudaFuncSetCacheConfig(bilateral_kernel_v7, cudaFuncCachePreferL1);
 
 	t.start();
-	bilateral_kernel_v7<<<Grid, Block, dim>>>(GPU_output, width, height, gpu_image_pitch, radius, g_2d, g_1d);
+	bilateral_kernel<<<Grid, Block, dim>>>(GPU_output, width, height, gpu_image_pitch, radius, g_2d, g_1d);
 	t.stop();
 	SAFE_CALL(cudaDeviceSynchronize(), "CUDA DEVICE SYNCHRONIZE");
 	t.printTime();
