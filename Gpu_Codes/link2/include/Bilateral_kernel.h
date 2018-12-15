@@ -3,10 +3,12 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <opencv2/core/core.hpp>
 
-#include "ProcessingInterface.h"
+using cv::Mat;
 
-class CUDABilateralFilter : public ProcessingInterface {
+
+class CUDABilateralFilter {
 public:
 	CUDABilateralFilter(const int raio, const float sigma_s, const float sigma_r);
 	~CUDABilateralFilter();
