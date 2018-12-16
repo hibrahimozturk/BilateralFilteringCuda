@@ -1,4 +1,5 @@
 #include "Bilateral_kernel.h"
+//#include <cuda_profiler_api.h>
 #include "Timer.h"
 #include <cuda.h>
 
@@ -65,25 +66,33 @@ __global__ void mask_calc_kernel(float *g_1d, float *g_2d, const int radius, con
 
 }
 
-__device__ float kernel(int x, const int y, float *g2d, float *g1d){
-	float value=0.0, k=0.0;
-	int pixel=tex2D(CUDA_Frame, x, y);
-	int pos_value=0, pos_k=0;
-	
-	for(int i=-5; i<6; i++){
-		for(int channel_pos=-15; channel_pos<=15; channel_pos+=3){
-			value+=tex2D(CUDA_Frame, x-channel_pos, y+i)*g2d[pos_value++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-channel_pos, y+i))];
+__device__ int global2D(unsigned char *GPU_input_global, int x, int y, int width){
+	return int(GPU_input_global[y*width + x]);
+}
+
+__device__ float kernel(const int x, const int y, float *g2d, float *g1d, const int radius, const int width,
+														const int height, unsigned char *GPU_input_global){
+
+
+		float value=0.0, k=0.0;
+		int  pixel = global2D(GPU_input_global, x, y, width);
+
+
+		int pos_value=0, pos_k=0;
+
+		for(int i=-radius; i<=radius; i++){
+			for(int channel_pos=-radius*3; channel_pos<=radius*3; channel_pos+=3){
+				value+=global2D(GPU_input_global, x-channel_pos, y+i, width)*g2d[pos_value++]*g1d[ABS(pixel-global2D(GPU_input_global, x-channel_pos, y+i, width))];
+			}
+			for(int channel_pos=-radius*3; channel_pos<=radius*3; channel_pos+=3){
+				k+=g2d[pos_k++]*g1d[ABS(pixel-global2D(GPU_input_global, x-channel_pos, y+i, width))];
+			}
 		}
-		for(int channel_pos=-15; channel_pos<=15; channel_pos+=3){
-			k+=g2d[pos_k++]*g1d[ABS(pixel-tex2D(CUDA_Frame, x-channel_pos, y+i))];
-		}
-	}
 
 	return value/k;
 }
 
-__global__ void bilateral_kernel(unsigned char *out, const int width, const int height,
-								const size_t pitch, const int radius, const float *mask, const float *gauss){
+__global__ void bilateral_kernel(unsigned char *GPU_input_global ,unsigned char *GPU_output_global, const int width, const int height, const int radius, const float *mask, const float *gauss){
 
 	const int x = threadIdx.x + blockIdx.x * blockDim.x;
 	const int y = threadIdx.y + blockIdx.y * blockDim.y;
@@ -104,29 +113,30 @@ __global__ void bilateral_kernel(unsigned char *out, const int width, const int 
 		return;
 
 	float result=0.0;
-	result=kernel(x, y, g2d, gaussian);
-	out[y*pitch+x]=(unsigned char) result;
+	result=kernel(x, y, g2d, gaussian, radius, width, height, GPU_input_global);
+	GPU_output_global[y*width+x]=(unsigned char) result;
+
 }
 
 CUDABilateralFilter::CUDABilateralFilter(const int r, const float sigma_s, const float sigma_r) :
 radius(r), ss(sigma_s), sr(sigma_r) {}
 
 void CUDABilateralFilter::apply(const Mat &input, Mat &output){
-	const int width=input.cols*3, height=input.rows;
+	const int width=input.cols*3, height=input.rows; // 3 columns for RGB
 	const dim3 Block(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 Grid;
-	unsigned char *GPU_input, *GPU_output;
+	unsigned char *GPU_input_global, *GPU_output_global;
+
 	float *g_1d, *g_2d;
-	size_t gpu_image_pitch=0;
+	size_t gpu_image_size=width*height*sizeof(unsigned char);
 
-	SAFE_CALL(cudaMallocPitch<unsigned char>(&GPU_input, &gpu_image_pitch, width, height), "CUDA MALLOC PITCH");
-	SAFE_CALL(cudaMallocPitch<unsigned char>(&GPU_output, &gpu_image_pitch, width, height), "CUDA MALLOC PITCH");
+//	printf("%d\n", input.data[10][10]);
+//	printf("%d \n", input.rows);
 
-	// değişebilir
-	SAFE_CALL(cudaBindTexture2D(NULL, CUDA_Frame, GPU_input, width, height, gpu_image_pitch), "CUDA BIND TEXTURE");
-	CUDA_Frame.addressMode[0] = CUDA_Frame.addressMode[1] = cudaAddressModeBorder;
+	SAFE_CALL(cudaMalloc((unsigned char**)&GPU_input_global, gpu_image_size), "CUDA MALLOC Input");
+	SAFE_CALL(cudaMalloc((unsigned char**)&GPU_output_global, gpu_image_size), "CUDA MALLOC Output");
 
-	SAFE_CALL(cudaMemcpy2D(GPU_input, gpu_image_pitch, input.data, width, width, height, cudaMemcpyHostToDevice), "CUDA MEMCPY 2D HOST TO DEVICE");
+	SAFE_CALL(cudaMemcpy(GPU_input_global, input.data, gpu_image_size, cudaMemcpyHostToDevice), "CUDA MEMCPY HOST TO DEVICE");
 
 	Grid.x=(width+Block.x-1)/Block.x;
 	Grid.y=(height+Block.y-1)/Block.y;
@@ -148,18 +158,16 @@ void CUDABilateralFilter::apply(const Mat &input, Mat &output){
 	Timer t;
 
 	t.start();
-	bilateral_kernel<<<Grid, Block, dim>>>(GPU_output, width, height, gpu_image_pitch, radius, g_2d, g_1d);
+	bilateral_kernel<<<Grid, Block, dim>>>(GPU_input_global, GPU_output_global, width, height, radius, g_2d, g_1d);
 	t.stop();
 	SAFE_CALL(cudaDeviceSynchronize(), "CUDA DEVICE SYNCHRONIZE");
 	t.printTime();
 
-	SAFE_CALL(cudaMemcpy2D(output.data, width, GPU_output, gpu_image_pitch, width, height, cudaMemcpyDeviceToHost), "CUDA MEMCPY2D DEVICE TO HOST");
-
-	SAFE_CALL(cudaUnbindTexture(CUDA_Frame), "CUDA UNBIND TEXTURE");
+	SAFE_CALL(cudaMemcpy(output.data,GPU_output_global, gpu_image_size, cudaMemcpyDeviceToHost), "CUDA MEMCPY DEVICE TO HOST");
 
 	SAFE_CALL(cudaFree(g_2d), "CUDA FREE");
 	SAFE_CALL(cudaFree(g_1d), "CUDA FREE");
-	SAFE_CALL(cudaFree(GPU_input), "CUDA FREE");
-	SAFE_CALL(cudaFree(GPU_output), "CUDA FREE");
+	SAFE_CALL(cudaFree(GPU_input_global), "CUDA FREE");
+	SAFE_CALL(cudaFree(GPU_output_global), "CUDA FREE");
 }
 

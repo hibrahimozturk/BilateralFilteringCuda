@@ -20,30 +20,26 @@ using cv::imread;
 using cv::imwrite;
 using namespace cv;
 
-//void Process(Mat src, ProcessingInterface *p, string name){
-//	Mat dst(src.size(), src.type());
-//	p->apply(src, dst);
-////    printf ("%s \n", name);
-//    namedWindow("window", WINDOW_AUTOSIZE );// Create a window for display.
-//	imshow("window", dst);
-//	waitKey( 0);
-//	cv::imwrite("/home/halil/Hcttp_Msc/CMP_674_GPU_Programming/github/Bilateral_Filtering_Cuda_CMP674/Gpu_Codes/link2/image-output.jpg", dst);
-//
-//}
 
 int main(int argc, char **argv){
 
  	string source="test-crop-512.jpg";
 	Mat img = imread(source);
-//	Mat img(img_c.size(), CV_8UC1);
-//	cv::cvtColor(img_c, img, COLOR_RGB2GRAY);
-//	cv::imwrite("/home/halil/Hcttp_Msc/CMP_674_GPU_Programming/github/Bilateral_Filtering_Cuda_CMP674/Gpu_Codes/link2/image.png", img);
 
 	if(!img.data)
 		return -1;
 
+	// Remove Green and Blue channels
+//    Mat channel[3];
+//    split(img, channel);
+//	channel[2]=Mat::zeros(img.rows, img.cols, CV_8UC1);
+//	merge(channel,3,img);
+//	channel[1]=Mat::zeros(img.rows, img.cols, CV_8UC1);
+//	merge(channel,3,img);
+
+
 	int t = 0;
-	int r = 5 ;
+	int r = 7 ;
 	double gs = 12.0;
 	double gr = 16.0;
 
@@ -61,9 +57,8 @@ int main(int argc, char **argv){
     namedWindow("window", WINDOW_AUTOSIZE );// Create a window for display.
 	imshow("window", dst);
 	waitKey( 0);
+
 	cv::imwrite("image-output.jpg", dst);
 
-
-//	Process(img, p, NAME);
 	return 0;
 }
