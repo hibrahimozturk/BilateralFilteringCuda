@@ -48,15 +48,14 @@ int main(int argc, char **argv){
 	string NAME, mask=std::to_string(raio)+"x"+std::to_string(raio);
 
 	CUDABilateralFilter *p;
-	
 	p=new CUDABilateralFilter(r, gs, gr);
 
 	Mat dst(img.size(), img.type());
 	p->apply(img, dst);
 
-    namedWindow("window", WINDOW_AUTOSIZE );// Create a window for display.
-	imshow("window", dst);
-	waitKey( 0);
+//    namedWindow("window", WINDOW_AUTOSIZE );// Create a window for display.
+//	imshow("window", dst);
+//	waitKey(0);
 
 	cv::imwrite("image-output.jpg", dst);
 

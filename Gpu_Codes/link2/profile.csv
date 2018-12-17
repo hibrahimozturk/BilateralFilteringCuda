@@ -1,0 +1,3 @@
+Name,Invocations,Avg. Duration(ns),Registers/Thread,Static Shared Memory,Avg. Dynamic Shared Memory
+"mask_calc_kernel(float*, float*, int, float, float)",1,20257,36,0,0
+"bilateral_kernel(unsigned char*, unsigned char*, int, int, int, float const *, float const *)",1,91730669,45,1024,900
