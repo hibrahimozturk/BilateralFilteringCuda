@@ -12,6 +12,8 @@ public:
 	void start();
 	void stop();
 	void printTime();
+	float getTime();
+
 private:
 	cudaEvent_t begin, end;
 };

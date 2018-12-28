@@ -57,7 +57,7 @@ int main(int argc, char **argv){
 //	imshow("window", dst);
 //	waitKey(0);
 
-	cv::imwrite("image-output.jpg", dst);
+	cv::imwrite("image-output-1.jpg", dst);
 
 	return 0;
 }
