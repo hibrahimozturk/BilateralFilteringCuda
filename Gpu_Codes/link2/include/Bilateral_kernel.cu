@@ -76,22 +76,26 @@ __device__ int global2D(unsigned char *GPU_input_global, int x, int y, int width
 	}
 }
 
-__device__ int shared2D(unsigned int img_part[32][32*3], int x, int y, int radius){
+__device__ int shared2D(unsigned int img_part[32+1][32*3+1], int x, int y, int radius){
 	return img_part[y+(radius+1)][x+(radius+1)*3];
 }
-__device__ float kernel(const int x, const int y, float *g2d, float *g1d, const int radius
-															, unsigned int img_part[32][32*3]){
+
+__device__ float kernel(const int x, const int y, float *g2d, float *g1d, const int radius, const int width,
+														const int height, unsigned char *GPU_input_global){
+
+
 		float value=0.0, k=0.0;
-		int  pixel = shared2D(img_part, x, y, radius);
+		int  pixel = global2D(GPU_input_global, x, y, width, height);
+
 
 		int pos_value=0, pos_k=0;
 
 		for(int i=-radius; i<=radius; i++){
 			for(int channel_pos=-radius*3; channel_pos<=radius*3; channel_pos+=3){
-				value+=shared2D(img_part, x+channel_pos, y+i, radius)*g2d[pos_value++]*g1d[ABS(pixel-shared2D(img_part, x+channel_pos, y+i, radius))];
+				value+=global2D(GPU_input_global, x-channel_pos, y+i, width, height)*g2d[pos_value++]*g1d[ABS(pixel-global2D(GPU_input_global, x-channel_pos, y+i, width, height))];
 			}
 			for(int channel_pos=-radius*3; channel_pos<=radius*3; channel_pos+=3){
-				k+=g2d[pos_k++]*g1d[ABS(pixel-shared2D(img_part, x+channel_pos, y+i, radius))];
+				k+=g2d[pos_k++]*g1d[ABS(pixel-global2D(GPU_input_global, x-channel_pos, y+i, width, height))];
 			}
 		}
 
@@ -107,7 +111,7 @@ __global__ void bilateral_filter(unsigned char *GPU_input_global ,unsigned char 
 	const int shared_width = (block_size+2*(radius+1)) *3;
 
 	// pixels at edges need radius+1 pixels at left/right/up/bottom
-	__shared__ unsigned int img_part[16+2*(7+1)][(16+2*(7+1))*3];
+	__shared__ unsigned int img_part[16+2*(7+1)+1][(16+2*(7+1))*3+1];
 
 	int copy_size_x = shared_width/block_size;
 	int copy_size_y = shared_height/block_size;
@@ -140,7 +144,7 @@ __global__ void bilateral_filter(unsigned char *GPU_input_global ,unsigned char 
  		return;
 
 	float result=0.0;
-	result=kernel(threadIdx.x, threadIdx.y, g2d, gaussian, radius,  img_part);
+	result=kernel(x, y, g2d, gaussian, radius, width, height, GPU_input_global);
 	GPU_output_global[y*width+x]=(unsigned char) result;
 
 }
