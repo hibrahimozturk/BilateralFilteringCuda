@@ -10,11 +10,6 @@
 __constant__ float CUDA_Gaussian2D[10202];
 __constant__ float CUDA_Gauss1D[256];
 
-__device__ const int FILTER_RADIUS = 7;
-__device__ const int FILTER_RADIUS_3 = 7*3;
-__device__ const int MINUS_FILTER_RADIUS_3 = -7*3;
-
-
 // Textures
 texture<unsigned char> CUDA_Data;
 texture<unsigned char, cudaTextureType2D> CUDA_Frame;
@@ -77,32 +72,30 @@ __device__ int global2D(unsigned char *GPU_input_global, int x, int y, int width
 //		return 0;
 //	} else {
 //		printf("%d \n", (u nsigned int)GPU_input_global[y*width + x]);
-		return (unsigned int)GPU_input_global[y*width + x];
+		return GPU_input_global[y*width + x];
 //	}
 }
 
-__device__ int shared2D(unsigned int img_part[32+1][32*3+1], int x, int y, int radius){
-	return img_part[y+(radius+1)][x+(radius+1)*3];
+__device__ int shared2D(unsigned char *img_part, int x, int y, const int radius, const int shared_width){
+	return img_part[(y+(radius+1))*shared_width + (x+(radius+1)*3)];
 }
 
 __device__ float kernel(const int x, const int y, float *g2d, float *g1d, const int radius, const int width,
-														const int height, unsigned char *GPU_input_global){
+														const int height, unsigned char *img_part, const int shared_width){
 
 
 		float value=0.0, k=0.0;
-		int  pixel = global2D(GPU_input_global, x, y, width, height);
-
-
+		int  pixel = shared2D(img_part, x, y, radius, shared_width);
 
 		int pos_value=0, pos_k=0;
+		int cur_pixel = 0;
 
 
 		for(int i=-radius; i<=radius; i++){
 			for(int channel_pos=-radius*3; channel_pos<=radius*3; channel_pos+=3){
-				value+=global2D(GPU_input_global, x-channel_pos, y+i, width, height)*g2d[pos_value++]*g1d[256-(pixel-global2D(GPU_input_global, x-channel_pos, y+i, width, height))];
-			}
-			for(int channel_pos=-radius*3; channel_pos<=radius*3; channel_pos+=3){
-				k+=g2d[pos_k++]*g1d[256-(pixel-global2D(GPU_input_global, x-channel_pos, y+i, width, height))];
+				cur_pixel = shared2D(img_part, x+channel_pos, y+i, radius, shared_width);
+				value+=cur_pixel*g2d[pos_value++]*g1d[256-(pixel-cur_pixel)];
+				k+=g2d[pos_k++]*g1d[256-(pixel- cur_pixel)];
 			}
 		}
 
@@ -114,24 +107,24 @@ __global__ void bilateral_filter(unsigned char *GPU_input_global ,unsigned char 
 	const int x = threadIdx.x + blockIdx.x * blockDim.x;
 	const int y = threadIdx.y + blockIdx.y * blockDim.y;
 
-//	const int shared_height = block_size+2*(radius+1);
-//	const int shared_width = (block_size+2*(radius+1))*3; //RGB
-//
-//	// pixels at edges need radius+1 pixels at left/right/up/bottom
-//	__shared__ unsigned int img_part[16+2*(7+1)+1][(16+2*(7+1))*3+1];
-//
-//	int copy_size_x = shared_width/block_size;
-//	int copy_size_y = shared_height/block_size;
-//
-//	int copy_start_y = blockIdx.y * blockDim.y - (radius+1);
-//	int copy_start_x = blockIdx.x * blockDim.x - (radius+1)*3;
-//
-//	for(int shared_x=threadIdx.x*copy_size_x; shared_x<(threadIdx.x+1)*copy_size_x; shared_x++){
-//		for(int shared_y=threadIdx.y*copy_size_y; shared_y<(threadIdx.y+1)*copy_size_y; shared_y++){
-//			img_part[shared_y][shared_x] = global2D(GPU_input_global, copy_start_x+shared_x, copy_start_y+shared_y, width, height);
-//		}
-//	}
-//	__syncthreads();
+	const int shared_height = block_size+2*(radius+1);
+	const int shared_width = (block_size+2*(radius+1))*3; //RGB
+
+	// pixels at edges need radius+1 pixels at left/right/up/bottom
+	__shared__ unsigned char img_part[4096];
+
+	int copy_size_x = shared_width/block_size;
+	int copy_size_y = shared_height/block_size;
+
+	int copy_start_y = blockIdx.y * blockDim.y - (radius+1);
+	int copy_start_x = blockIdx.x * blockDim.x - (radius+1)*3;
+
+	for(int shared_x=threadIdx.x*copy_size_x; shared_x<(threadIdx.x+1)*copy_size_x; shared_x++){
+		for(int shared_y=threadIdx.y*copy_size_y; shared_y<(threadIdx.y+1)*copy_size_y; shared_y++){
+			img_part[shared_y*shared_width + shared_x] = global2D(GPU_input_global, copy_start_x+shared_x, copy_start_y+shared_y, width, height);
+		}
+	}
+	__syncthreads();
 
 
 //	printf("x: %d y: %d blockIdx.x: %d blockIdx.y: %d \n", x,y,blockIdx.x, blockIdx.y);
@@ -142,7 +135,8 @@ __global__ void bilateral_filter(unsigned char *GPU_input_global ,unsigned char 
 		    size+threadIdx.x]=mask[threadIdx.y*size+threadIdx.x];
 	}
 
-	__shared__ float gaussian[256+256];
+	__shared__ float gaussian[256+256]; //Before and after 256 values are same
+										//Two parts are symmetric
 	const int w=threadIdx.y*16+threadIdx.x
 			;
 	if(w<256){
@@ -158,7 +152,7 @@ __global__ void bilateral_filter(unsigned char *GPU_input_global ,unsigned char 
  		return;
 
 	float result=0.0;
-	result=kernel(x, y, g2d, gaussian, radius, width, height, GPU_input_global);
+	result=kernel(threadIdx.x, threadIdx.y, g2d, gaussian, radius, width, height, img_part, shared_width);
 	GPU_output_global[y*width+x]=(unsigned char) result;
 
 }
