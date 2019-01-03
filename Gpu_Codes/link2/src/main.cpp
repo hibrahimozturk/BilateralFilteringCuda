@@ -39,7 +39,7 @@ int main(int argc, char **argv){
 
 
 	int t = 0;
-	int r = 7 ;
+	int r = 7;
 	double gs = 12.0;
 	double gr = 16.0;
 
