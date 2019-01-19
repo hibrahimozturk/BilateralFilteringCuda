@@ -23,7 +23,7 @@ using namespace cv;
 
 int main(int argc, char **argv){
 
- 	string source="crop-3072.jpg";
+ 	string source="crop-512.jpg";
 	Mat img = imread(source);
 
 	if(!img.data)
@@ -44,7 +44,7 @@ int main(int argc, char **argv){
 	Mat dst(img.size(), img.type());
 	p->apply(img, dst);
 
-	cv::imwrite("output-3072.jpg", dst);
+	cv::imwrite("output-512.jpg", dst);
 
 	return 0;
 }
