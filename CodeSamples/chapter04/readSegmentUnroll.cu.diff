@@ -1,0 +1,100 @@
+diff --git a/CodeSamples/chapter04/readSegmentUnroll.cu b/CodeSamples/chapter04/readSegmentUnroll.cu
+index eff67ef..63a80e6 100644
+--- a/CodeSamples/chapter04/readSegmentUnroll.cu
++++ b/CodeSamples/chapter04/readSegmentUnroll.cu
+@@ -69,9 +69,8 @@ __global__ void readOffsetUnroll2(float *A, float *B, float *C, const int n,
+     unsigned int i = blockIdx.x * blockDim.x * 2 + threadIdx.x;
+     unsigned int k = i + offset;
+ 
+-    if (k + blockDim.x < n)
+-    {
+-        C[i]            = A[k] + B[k];
++    if (k < n) C[i] = A[k] + B[k];
++    if (k + blockDim.x < n) {
+         C[i + blockDim.x] = A[k + blockDim.x] + B[k + blockDim.x];
+     }
+ }
+@@ -82,11 +81,14 @@ __global__ void readOffsetUnroll4(float *A, float *B, float *C, const int n,
+     unsigned int i = blockIdx.x * blockDim.x * 4 + threadIdx.x;
+     unsigned int k = i + offset;
+ 
+-    if (k + 3 * blockDim.x < n)
+-    {
+-        C[i]                  = A[k]                  + B[k];
++    if (k < n) C[i] = A[k]                  + B[k];
++    if (k + blockDim.x < n) {
+         C[i + blockDim.x]     = A[k + blockDim.x]     + B[k + blockDim.x];
++    }
++    if (k + 2 * blockDim.x < n) {
+         C[i + 2 * blockDim.x] = A[k + 2 * blockDim.x] + B[k + 2 * blockDim.x];
++    }
++    if (k + 3 * blockDim.x < n) {
+         C[i + 3 * blockDim.x] = A[k + 3 * blockDim.x] + B[k + 3 * blockDim.x];
+     }
+ }
+@@ -102,7 +104,10 @@ int main(int argc, char **argv)
+     CHECK(cudaSetDevice(dev));
+ 
+     // set up array size
+-    int nElem = 1 << 20; // total number of elements to reduce
++    int power = 20;
++    if (argc > 1) power = atoi(argv[1]);
++
++    int nElem = 1 << power; // total number of elements to reduce
+     printf(" with array size %d\n", nElem);
+     size_t nBytes = nElem * sizeof(float);
+ 
+@@ -110,9 +115,9 @@ int main(int argc, char **argv)
+     int blocksize = 512;
+     int offset = 0;
+ 
+-    if (argc > 1) offset    = atoi(argv[1]);
++    if (argc > 1) offset    = atoi(argv[2]);
+ 
+-    if (argc > 2) blocksize = atoi(argv[2]);
++    if (argc > 2) blocksize = atoi(argv[3]);
+ 
+     // execution configuration
+     dim3 block (blocksize, 1);
+@@ -149,6 +154,7 @@ int main(int argc, char **argv)
+     printf("warmup     <<< %4d, %4d >>> offset %4d elapsed %f sec\n", grid.x,
+            block.x, offset, iElaps);
+     CHECK(cudaGetLastError());
++    CHECK(cudaMemset(d_C, 0x00, nBytes));
+ 
+     // kernel 1
+     iStart = seconds();
+@@ -162,10 +168,11 @@ int main(int argc, char **argv)
+     // copy kernel result back to host side and check device results
+     CHECK(cudaMemcpy(gpuRef, d_C, nBytes, cudaMemcpyDeviceToHost));
+     checkResult(hostRef, gpuRef, nElem-offset);
++    CHECK(cudaMemset(d_C, 0x00, nBytes));
+ 
+     // kernel 2
+     iStart = seconds();
+-    readOffsetUnroll2<<<grid.x/2, block>>>(d_A, d_B, d_C, nElem/2, offset);
++    readOffsetUnroll2<<<grid.x/2, block>>>(d_A, d_B, d_C, nElem, offset);
+     CHECK(cudaDeviceSynchronize());
+     iElaps = seconds() - iStart;
+     printf("unroll2    <<< %4d, %4d >>> offset %4d elapsed %f sec\n",
+@@ -175,10 +182,11 @@ int main(int argc, char **argv)
+     // copy kernel result back to host side and check device results
+     CHECK(cudaMemcpy(gpuRef, d_C, nBytes, cudaMemcpyDeviceToHost));
+     checkResult(hostRef, gpuRef, nElem - offset);
++    CHECK(cudaMemset(d_C, 0x00, nBytes));
+ 
+     // kernel 3
+     iStart = seconds();
+-    readOffsetUnroll4<<<grid.x / 4, block>>>(d_A, d_B, d_C, nElem / 4, offset);
++    readOffsetUnroll4<<<grid.x / 4, block>>>(d_A, d_B, d_C, nElem, offset);
+     CHECK(cudaDeviceSynchronize());
+     iElaps = seconds() - iStart;
+     printf("unroll4    <<< %4d, %4d >>> offset %4d elapsed %f sec\n",
+@@ -188,6 +196,7 @@ int main(int argc, char **argv)
+     // copy kernel result back to host side and check device results
+     CHECK(cudaMemcpy(gpuRef, d_C, nBytes, cudaMemcpyDeviceToHost));
+     checkResult(hostRef, gpuRef, nElem - offset);
++    CHECK(cudaMemset(d_C, 0x00, nBytes));
+ 
+     // free host and device memory
+     CHECK(cudaFree(d_A));

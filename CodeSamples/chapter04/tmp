@@ -1,0 +1,46 @@
+diff --git a/CodeSamples/chapter04/readSegmentUnroll.cu b/CodeSamples/chapter04/readSegmentUnroll.cu
+index eff67ef..c305853 100644
+--- a/CodeSamples/chapter04/readSegmentUnroll.cu
++++ b/CodeSamples/chapter04/readSegmentUnroll.cu
+@@ -149,6 +149,7 @@ int main(int argc, char **argv)
+     printf("warmup     <<< %4d, %4d >>> offset %4d elapsed %f sec\n", grid.x,
+            block.x, offset, iElaps);
+     CHECK(cudaGetLastError());
++    CHECK(cudaMemset(d_C, 0x00, nBytes));
+ 
+     // kernel 1
+     iStart = seconds();
+@@ -162,10 +163,11 @@ int main(int argc, char **argv)
+     // copy kernel result back to host side and check device results
+     CHECK(cudaMemcpy(gpuRef, d_C, nBytes, cudaMemcpyDeviceToHost));
+     checkResult(hostRef, gpuRef, nElem-offset);
++    CHECK(cudaMemset(d_C, 0x00, nBytes));
+ 
+     // kernel 2
+     iStart = seconds();
+-    readOffsetUnroll2<<<grid.x/2, block>>>(d_A, d_B, d_C, nElem/2, offset);
++    readOffsetUnroll2<<<grid.x/2, block>>>(d_A, d_B, d_C, nElem, offset);
+     CHECK(cudaDeviceSynchronize());
+     iElaps = seconds() - iStart;
+     printf("unroll2    <<< %4d, %4d >>> offset %4d elapsed %f sec\n",
+@@ -175,10 +177,11 @@ int main(int argc, char **argv)
+     // copy kernel result back to host side and check device results
+     CHECK(cudaMemcpy(gpuRef, d_C, nBytes, cudaMemcpyDeviceToHost));
+     checkResult(hostRef, gpuRef, nElem - offset);
++    CHECK(cudaMemset(d_C, 0x00, nBytes));
+ 
+     // kernel 3
+     iStart = seconds();
+-    readOffsetUnroll4<<<grid.x / 4, block>>>(d_A, d_B, d_C, nElem / 4, offset);
++    readOffsetUnroll4<<<grid.x / 4, block>>>(d_A, d_B, d_C, nElem, offset);
+     CHECK(cudaDeviceSynchronize());
+     iElaps = seconds() - iStart;
+     printf("unroll4    <<< %4d, %4d >>> offset %4d elapsed %f sec\n",
+@@ -188,6 +191,7 @@ int main(int argc, char **argv)
+     // copy kernel result back to host side and check device results
+     CHECK(cudaMemcpy(gpuRef, d_C, nBytes, cudaMemcpyDeviceToHost));
+     checkResult(hostRef, gpuRef, nElem - offset);
++    CHECK(cudaMemset(d_C, 0x00, nBytes));
+ 
+     // free host and device memory
+     CHECK(cudaFree(d_A));

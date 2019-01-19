@@ -23,20 +23,11 @@ using namespace cv;
 
 int main(int argc, char **argv){
 
- 	string source="test-crop-512.jpg";
+ 	string source="crop-3072.jpg";
 	Mat img = imread(source);
 
 	if(!img.data)
 		return -1;
-
-	// Remove Green and Blue channels
-//    Mat channel[3];
-//    split(img, channel);
-//	channel[2]=Mat::zeros(img.rows, img.cols, CV_8UC1);
-//	merge(channel,3,img);
-//	channel[1]=Mat::zeros(img.rows, img.cols, CV_8UC1);
-//	merge(channel,3,img);
-
 
 	int t = 0;
 	int r = 7;
@@ -53,11 +44,7 @@ int main(int argc, char **argv){
 	Mat dst(img.size(), img.type());
 	p->apply(img, dst);
 
-//    namedWindow("window", WINDOW_AUTOSIZE );// Create a window for display.
-//	imshow("window", dst);
-//	waitKey(0);
-
-	cv::imwrite("image-output-1.jpg", dst);
+	cv::imwrite("output-3072.jpg", dst);
 
 	return 0;
 }

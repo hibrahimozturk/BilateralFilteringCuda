@@ -67,13 +67,7 @@ __global__ void mask_calc_kernel(float *g_1d, float *g_2d, const int radius, con
 }
 
 __device__ int global2D(unsigned char *GPU_input_global, int x, int y, int width, int height){
-//	if( x < 0 || x >= width || y < 0 || y >= width){
-////		printf("boundary error \n"  );
-//		return 0;
-//	} else {
-//		printf("%d \n", (u nsigned int)GPU_input_global[y*width + x]);
-		return GPU_input_global[y*width + x];
-//	}
+	return GPU_input_global[y*width + x];
 }
 
 __device__ int shared2D(unsigned char *img_part, int x, int y, const int radius, const int shared_width){
@@ -81,11 +75,10 @@ __device__ int shared2D(unsigned char *img_part, int x, int y, const int radius,
 }
 
 __device__ float kernel(const int x, const int y, float *g2d, float *g1d, const int radius, const int width,
-														const int height, unsigned char *img_part, const int shared_width){
-
+														unsigned char *img_part, const int shared_width){
 
 		float value=0.0, k=0.0;
-		int  pixel = shared2D(img_part, x, y, radius, shared_width);
+		unsigned char pixel = shared2D(img_part, x, y, radius, shared_width);
 
 		int pos_value=0, pos_k=0;
 		int cur_pixel = 0;
@@ -110,7 +103,6 @@ __global__ void bilateral_filter(unsigned char *GPU_input_global ,unsigned char 
 	const int shared_height = block_size+2*(radius+1);
 	const int shared_width = (block_size+2*(radius+1))*3; //RGB
 
-	// pixels at edges need radius+1 pixels at left/right/up/bottom
 	__shared__ unsigned char img_part[4096];
 
 	int copy_size_x = shared_width/block_size;
@@ -127,7 +119,6 @@ __global__ void bilateral_filter(unsigned char *GPU_input_global ,unsigned char 
 	__syncthreads();
 
 
-//	printf("x: %d y: %d blockIdx.x: %d blockIdx.y: %d \n", x,y,blockIdx.x, blockIdx.y);
 	const int size=2*radius+1;
 	extern __shared__ float g2d[];
 	if( threadIdx.x<size && threadIdx.y<size ){
@@ -152,7 +143,7 @@ __global__ void bilateral_filter(unsigned char *GPU_input_global ,unsigned char 
  		return;
 
 	float result=0.0;
-	result=kernel(threadIdx.x, threadIdx.y, g2d, gaussian, radius, width, height, img_part, shared_width);
+	result=kernel(threadIdx.x, threadIdx.y, g2d, gaussian, radius, width, img_part, shared_width);
 	GPU_output_global[y*width+x]=(unsigned char) result;
 
 }
@@ -176,7 +167,7 @@ void CUDABilateralFilter::apply(const Mat &input, Mat &output){
 	Timer t;
 	float tenTime = 0.0;
 
-	for(int i=0; i<1; i++){
+	for(int i=0; i<10; i++){
 
 		t.start();
 		SAFE_CALL(cudaMemcpy(GPU_input_global, input.data, gpu_image_size, cudaMemcpyHostToDevice), "CUDA MEMCPY HOST TO DEVICE");
